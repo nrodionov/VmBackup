@@ -38,19 +38,20 @@ DEFAULT_MAX_BACKUPS = 4
 DEFAULT_BACKUP_DIR = '/snapshots/BACKUPS'
 # note - some NAS file servers may fail with ':', so change to your desired format
 BACKUP_DIR_PATTERN = '%s/backup-%04d-%02d-%02d-(%02d:%02d:%02d)'
-STATUS_LOG = '/snapshots/NAUbackup/status.log'
+STATUS_LOG = '/backup/backup-status.log'
+DEFAULT_SERVER_ADDR = 'localhost'
 
 ############################# OPTIONAL
 # optional email may be triggered by configure next 3 parameters then find MAIL_ and uncommenting out the desired lines
-MAIL_TO_ADDR = 'your-email@your-domain'
+MAIL_TO_ADDR = 'admin@example.com'
 # note if MAIL_TO_ADDR has ipaddr then you may need to change the smtplib.SMTP() call
-MAIL_FROM_ADDR = 'your-from-address@your-domain'
-MAIL_SMTP_SERVER = 'your-mail-server'
+MAIL_FROM_ADDR = 'backup@example.com'
+MAIL_SMTP_SERVER = 'localhost'
 
 config = {}
-expected_keys = ['pool_db_backup', 'max_backups', 'backup_dir', 'vm-export']
+expected_keys = ['pool_db_backup', 'max_backups', 'backup_dir', 'vm-export', 'server_addr']
 message = ''
-xe_path = '/opt/xensource/bin' 
+xe_path = '/usr/bin' 
 
 def main(session): 
 
@@ -71,6 +72,9 @@ def main(session):
         status_log_begin(server_name)
 
     log('===========================')
+    global server_addr
+    server_addr = config['server_addr']
+    log('Server address: %s' % server_addr)
     log('VmBackup running on %s ...' % server_name)
     df_snapshots('Space before backups: df -Th %s' % config['backup_dir'])
 
@@ -230,7 +234,7 @@ def main(session):
             vif_out.close()
 
         # is vm currently running?
-        cmd = '%s/xe vm-list name-label=%s params=power-state | grep running' % (xe_path, vm_name)
+        cmd = '%s/xe -s %s -u root -pw %s vm-list name-label=%s params=power-state | grep running' % (xe_path, server_addr, password, vm_name)
         if run_log_out_wait_rc(cmd) == 0:
             log ('vm is running')
         else:
@@ -239,7 +243,7 @@ def main(session):
         # take a snapshot of this vm
         snap_name = 'RESTORE_%s' % vm_name
         log ('snap_name: %s  vm_uuid: %s' % (snap_name,vm_uuid))
-        cmd = '%s/xe vm-snapshot vm=%s new-name-label=%s' % (xe_path, vm_uuid, snap_name)
+        cmd = '%s/xe -s %s -u root -pw %s vm-snapshot vm=%s new-name-label=%s' % (xe_path, server_addr, password, vm_uuid, snap_name)
         log('1.cmd: %s' % cmd)
         snap_uuid = run_get_lastline(cmd)
         log ('snap-uuid: %s' % snap_uuid)
@@ -253,7 +257,7 @@ def main(session):
             continue
 
         # change snapshot so that it can be referenced by vm-export
-        cmd = '%s/xe template-param-set is-a-template=false ha-always-run=false uuid=%s' % (xe_path, snap_uuid)
+        cmd = '%s/xe -s %s -u root -pw %s template-param-set is-a-template=false ha-always-run=false uuid=%s' % (xe_path, server_addr, password, snap_uuid)
         log('2.cmd: %s' % cmd)
         if run_log_out_wait_rc(cmd) != 0:
             log('ERROR %s' % cmd)
@@ -265,7 +269,7 @@ def main(session):
             continue
     
         # vm-export snapshot
-        cmd = '%s/xe vm-export uuid=%s' % (xe_path, snap_uuid)
+        cmd = '%s/xe -s %s -u root -pw %s vm-export uuid=%s' % (xe_path, server_addr, password, snap_uuid)
         if compress:
             xva_file = os.path.join(backup_dir, vm_name + '.xva.gz')
             cmd = '%s filename="%s" compress=true' % (cmd, xva_file)
@@ -285,7 +289,7 @@ def main(session):
             continue
     
         # vm-uninstall snapshot
-        cmd = '%s/xe vm-uninstall uuid=%s force=true' % (xe_path, snap_uuid)
+        cmd = '%s/xe -s %s -u root -pw %s vm-uninstall uuid=%s force=true' % (xe_path, server_addr, password, snap_uuid)
         log('4.cmd: %s' % cmd)
         if run_log_out_wait_rc(cmd) != 0:
             log('WARNING-ERROR %s' % cmd)
@@ -456,7 +460,7 @@ def backup_pool_metadata(svr_name):
     metadata_base = os.path.join(config['backup_dir'], 'METADATA_' + svr_name)
     metadata_file = get_meta_path(metadata_base)
 
-    cmd = "%s/xe pool-dump-database file-name='%s'" % (xe_path, metadata_file)
+    cmd = "%s/xe -s %s -u root -pw %s pool-dump-database file-name='%s'" % (xe_path, server_addr, password, metadata_file)
     log(cmd)
     if run_log_out_wait_rc(cmd) != 0:
         log('ERROR failed to backup pool metadata')
@@ -488,7 +492,7 @@ def run_get_lastline(cmd):
     return resp
 
 def get_os_version(uuid):
-    f = os.popen('%s/xe vm-list params=os-version uuid=%s' % (xe_path, uuid))
+    f = os.popen('%s/xe -s %s -u root -pw %s vm-list params=os-version uuid=%s' % (xe_path, server_addr, password, uuid))
     for line in f.readlines():
         if re.search('([Mm]icrosoft|[Ww]indows)',line):
             return 'windows'
@@ -521,11 +525,11 @@ def send_email(to, subject, body_fname):
 def is_xe_master():
     # test to see if we are running on xe master
 
-    cmd = '%s/xe pool-list params=master --minimal' % xe_path
+    cmd = '%s/xe -s %s -u root -pw %s pool-list params=master --minimal' % {xe_path, server_addr, password}
     master_uuid = run_get_lastline(cmd)
 
     hostname = os.uname()[1]
-    cmd = '%s/xe host-list name-label=%s --minimal' % (xe_path, hostname)
+    cmd = '%s/xe -s %s -u root -pw %s host-list name-label=%s --minimal' % (xe_path, server_addr, password, hostname)
     host_uuid = run_get_lastline(cmd)
 
     if host_uuid == master_uuid:
@@ -581,9 +585,11 @@ def config_defaults():
         config['max_backups'] = str(DEFAULT_MAX_BACKUPS)
     if not 'backup_dir' in config.keys():
         config['backup_dir'] = str(DEFAULT_BACKUP_DIR)
-
+    if not 'server_addr' in config.keys():
+        config['server_addr'] = str(DEFAULT_SERVER_ADDR)
 def config_print():
     log('VmBackup.py running with these settings:')
+    log('  server_addr    = %s' % config['server_addr'])
     log('  backup_dir     = %s' % config['backup_dir'])
     log('  compress       = %s' % compress)
     log('  max_backups    = %s' % config['max_backups'])
@@ -671,8 +677,11 @@ if __name__ == '__main__':
         config_specified = 0
         config['vm-export'].append(cfg_file)
         config_defaults()
-
     config_print()
+
+    global server_addr
+    server_addr = config['server_addr']
+
     
     if not config_verify():
         print 'ERROR in configuration settings...'
@@ -681,7 +690,8 @@ if __name__ == '__main__':
     # acquire a xapi session by logging in
     try:
         username = 'root'
-        session = XenAPI.Session('https://localhost/')
+#        url = 'https://%s/' % server_addr
+        session = XenAPI.Session('https://' + server_addr)
         session.xenapi.login_with_password(username, password)
         hosts = session.xenapi.host.get_all()
     except XenAPI.Failure, e:
