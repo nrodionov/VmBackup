@@ -9,6 +9,7 @@
 # Title: a XenServer simple vm backup script
 # Package Contents: README.md, VmBackup.py (this file), example.cfg
 # Version History
+# - v2.1/nr 2015/04/15 Added option to get VMs from remove server
 # - v2.1 2014/08/22 Added email status option
 # - v2.0 2014/04/09 New VmBackup version (supersedes all previous NAUbackup versions)
 
@@ -46,7 +47,7 @@ DEFAULT_SERVER_ADDR = 'localhost'
 MAIL_TO_ADDR = 'admin@example.com'
 # note if MAIL_TO_ADDR has ipaddr then you may need to change the smtplib.SMTP() call
 MAIL_FROM_ADDR = 'backup@example.com'
-MAIL_SMTP_SERVER = 'localhost'
+MAIL_SMTP_SERVER = 'mail.example.com'
 
 config = {}
 expected_keys = ['pool_db_backup', 'max_backups', 'backup_dir', 'vm-export', 'server_addr']
