@@ -10,6 +10,7 @@ directly or indirectly affected.
 **Package Contents:** README.md (this file), VmBackup.py, example.cfg
 
 ## Version History:
+ - v2.1/nr 2015/04/15 Added option to get VMs from remove server
  - v2.1 2014/08/22 Added email status option
  - v2.0 2014/04/09 New VmBackup version (supersedes all previous NAUbackup versions)
 
@@ -85,6 +86,8 @@ Crontab example:
    vm-export=my-vm-name
    vm-export=my-second-vm
    vm-export=my-third-vm
+ 5. Connect to remote XenServer
+   server_addr=xen1.exapmle.com
 
 ## NFS Setup
   - The NFS server holding the backup storage area will need to export its directory to
@@ -99,6 +102,11 @@ Crontab example:
   - There should be no need to alter any settings on any of the XenServers unless if firewalls
     are utilized anywere within the network chain, appropriate tunneling should be enabled as
     required.
+
+## Fetch VMs to remote server
+  - There's no need to use NFS to backup VMs if you plan to fetch them directly from backup server.
+    All you have to do is to install 'xe' utility from XenServer distribution and have your backup server
+    fetch VMs from bunch of XenServers via API using encrypted channel using this fork of scripts.
 
 ## Installation
  1. Copy VmBackup.py to a XenServer local execution path.
